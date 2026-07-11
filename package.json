@@ -1,0 +1,16 @@
+{
+  "name": "trek-plugin-trip-todos",
+  "version": "1.0.0",
+  "private": true,
+  "type": "commonjs",
+  "description": "TREK dashboard widget: open to-dos from all trips, sorted by due date.",
+  "license": "MIT",
+  "scripts": {
+    "dev": "trek-plugin dev",
+    "validate": "trek-plugin validate .",
+    "pack": "trek-plugin pack ."
+  },
+  "devDependencies": {
+    "trek-plugin-sdk": "^1.4.0"
+  }
+}

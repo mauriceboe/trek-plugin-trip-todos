@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Trip To-Dos</title>
+<!-- trek:ui -->
+<style>
+  /* The host draws the titled sidebar card; our root stays chrome-free and flush
+     (no bg / border / radius / shadow) so there's no card-in-card. The kit inlines
+     TREK's design tokens + live theme, so everything below drives off var(--…). */
+  html, body { margin: 0; padding: 0; background: transparent; overflow: hidden; }
+  body {
+    font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+    color: var(--text-primary, #111827);
+    -webkit-font-smoothing: antialiased;
+  }
+  #app { padding: 2px; }
+
+  svg { width: 1em; height: 1em; flex-shrink: 0; }
+
+  .tt-list { display: flex; flex-direction: column; gap: 4px; }
+
+  .tt-row {
+    display: flex; align-items: stretch; gap: 11px;
+    padding: 9px 11px;
+    border-radius: 12px;
+    cursor: pointer;
+    text-align: start;
+    border: none; background: none; width: 100%; font: inherit; color: inherit;
+    transition: background-color 160ms cubic-bezier(0.23, 1, 0.32, 1),
+                transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
+  }
+  .tt-row:hover { background: var(--bg-hover, rgba(0,0,0,0.03)); }
+  .tt-row:focus-visible { outline: 2px solid var(--accent, #4f46e5); outline-offset: -2px; }
+  .tt-row:active { transform: scale(0.99); transition-duration: 80ms; }
+
+  /* slim traffic-light bar down the left of each row */
+  .tt-bar {
+    width: 3px; border-radius: 3px; flex-shrink: 0; align-self: stretch;
+    min-height: 30px;
+    background: var(--tt-c, var(--text-faint, #9ca3af));
+  }
+  .tt-row.is-overdue .tt-bar { box-shadow: 0 0 8px -1px color-mix(in srgb, var(--tt-c) 65%, transparent); }
+
+  .tt-body { min-width: 0; flex: 1; display: flex; flex-direction: column; justify-content: center; }
+  .tt-name {
+    font-size: 13px; line-height: 1.3; font-weight: 600;
+    color: var(--text-primary, #111827);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .tt-sub {
+    display: flex; align-items: center; gap: 8px; margin-top: 5px;
+    font-size: 11.5px; min-width: 0;
+  }
+  .tt-trip {
+    display: inline-flex; align-items: center; max-width: 50%;
+    padding: 2px 8px; border-radius: 999px;
+    background: var(--bg-hover, rgba(0,0,0,0.05));
+    color: var(--text-secondary, #374151); font-weight: 500;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 1;
+  }
+  .tt-due {
+    display: inline-flex; align-items: center; gap: 4px;
+    color: var(--tt-c, var(--text-muted, #6b7280)); font-weight: 550;
+    font-variant-numeric: tabular-nums; white-space: nowrap; flex-shrink: 0;
+  }
+  .tt-due svg { width: 11px; height: 11px; opacity: .9; }
+  .tt-row.is-later .tt-due, .tt-row.is-none .tt-due { font-weight: 500; }
+
+  .tt-more {
+    display: flex; align-items: center; gap: 5px;
+    padding: 9px 11px 3px; font-size: 11.5px; font-weight: 500;
+    color: var(--text-muted, #6b7280); font-variant-numeric: tabular-nums;
+  }
+  .tt-more svg { width: 12px; height: 12px; opacity: .7; }
+
+  /* empty state */
+  .tt-empty { text-align: center; padding: 16px 8px 12px; }
+  .tt-empty-ic {
+    width: 40px; height: 40px; margin: 0 auto;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--success, #16a34a) 14%, transparent);
+    color: var(--success, #16a34a);
+  }
+  .tt-empty-ic svg { width: 21px; height: 21px; }
+  .tt-empty-title { margin-top: 10px; font-size: 13px; font-weight: 600; color: var(--text-primary, #111827); }
+  .tt-empty-sub { margin-top: 3px; font-size: 12px; color: var(--text-muted, #6b7280); line-height: 1.4; }
+
+  .tt-error { padding: 12px 8px; font-size: 12px; color: var(--text-muted, #6b7280); text-align: center; }
+
+  /* loading skeleton */
+  .tt-sk { display: flex; align-items: stretch; gap: 11px; padding: 9px 11px; }
+  .tt-sk .bar { width: 3px; border-radius: 3px; align-self: stretch; min-height: 30px; }
+  .tt-sk .b { flex: 1; display: flex; flex-direction: column; justify-content: center; }
+  .tt-sk .l { height: 9px; border-radius: 5px; }
+  .tt-sk .l1 { width: 76%; margin-bottom: 8px; } .tt-sk .l2 { width: 46%; }
+  .sk {
+    background: linear-gradient(90deg,
+      var(--bg-hover, rgba(0,0,0,0.06)) 25%,
+      color-mix(in srgb, var(--bg-hover, rgba(0,0,0,0.06)) 45%, transparent) 50%,
+      var(--bg-hover, rgba(0,0,0,0.06)) 75%);
+    background-size: 200% 100%;
+    animation: tt-sheen 1.3s ease-in-out infinite;
+  }
+  @keyframes tt-sheen { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+  /* entrance */
+  .tt-row, .tt-empty, .tt-more { animation: tt-in 320ms cubic-bezier(0.23, 1, 0.32, 1) both; }
+  @keyframes tt-in { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+    .tt-row:active { transform: none; }
+  }
+</style>
+</head>
+<body>
+<div id="app" aria-live="polite"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  var MAX_VISIBLE = 2;          // show only the two most-urgent; the rest roll up
+  var POLL_MS = 300000;         // refresh every 5 min
+  var DAY = 86400000;
+
+  // Only these five strings are hand-translated; the due-date phrases (today /
+  // tomorrow / in N days / N days ago) come from the browser's own
+  // Intl.RelativeTimeFormat, which pluralises correctly for every locale.
+  // Keys are TREK locale codes (m.locale). `more(n)` is the "+N more open" footer.
+  var STR = {
+    en:      { done: "All caught up",   doneSub: "No open to-dos across your trips.",             noDate: "no due date",     more: function (n) { return n + " more open"; },        err: "Couldn’t load your to-dos." },
+    de:      { done: "Alles erledigt",  doneSub: "Keine offenen To-Dos in deinen Trips.",         noDate: "kein Datum",      more: function (n) { return n + " weitere offen"; },    err: "To-Dos konnten nicht geladen werden." },
+    es:      { done: "Todo al día",     doneSub: "No tienes tareas pendientes en tus viajes.",     noDate: "sin fecha",       more: function (n) { return n + " pendientes más"; },   err: "No se pudieron cargar tus tareas." },
+    fr:      { done: "Tout est à jour", doneSub: "Aucune tâche en attente dans vos voyages.",       noDate: "sans échéance",   more: function (n) { return n + " autres en attente"; }, err: "Impossible de charger vos tâches." },
+    it:      { done: "Tutto in ordine", doneSub: "Nessuna attività in sospeso nei tuoi viaggi.",    noDate: "senza scadenza",  more: function (n) { return "altre " + n + " in sospeso"; }, err: "Impossibile caricare le attività." },
+    nl:      { done: "Alles bijgewerkt", doneSub: "Geen openstaande to-do's in je reizen.",         noDate: "geen datum",      more: function (n) { return "nog " + n + " open"; },    err: "Kon je to-do's niet laden." },
+    br:      { done: "Tudo em dia",     doneSub: "Nenhuma tarefa pendente nas suas viagens.",       noDate: "sem data",        more: function (n) { return "mais " + n + " pendentes"; }, err: "Não foi possível carregar as tarefas." },
+    cs:      { done: "Vše hotovo",      doneSub: "Ve vašich cestách nejsou žádné otevřené úkoly.",  noDate: "bez termínu",     more: function (n) { return "+ " + n + " dalších"; },   err: "Úkoly se nepodařilo načíst." },
+    pl:      { done: "Wszystko zrobione", doneSub: "Brak otwartych zadań w Twoich podróżach.",       noDate: "bez terminu",     more: function (n) { return "jeszcze " + n; },          err: "Nie udało się wczytać zadań." },
+    hu:      { done: "Minden kész",     doneSub: "Nincs nyitott teendő az utazásaidban.",           noDate: "nincs határidő",  more: function (n) { return "még " + n; },              err: "Nem sikerült betölteni a teendőket." },
+    ru:      { done: "Всё сделано",     doneSub: "В ваших поездках нет открытых задач.",            noDate: "без срока",       more: function (n) { return "ещё " + n; },              err: "Не удалось загрузить задачи." },
+    uk:      { done: "Усе виконано",    doneSub: "У ваших подорожах немає відкритих завдань.",      noDate: "без терміну",     more: function (n) { return "ще " + n; },               err: "Не вдалося завантажити завдання." },
+    tr:      { done: "Her şey tamam",   doneSub: "Gezilerinizde açık görev yok.",                   noDate: "tarih yok",       more: function (n) { return n + " tane daha"; },        err: "Görevler yüklenemedi." },
+    sv:      { done: "Allt är klart",   doneSub: "Inga öppna att-göra-uppgifter i dina resor.",     noDate: "inget datum",     more: function (n) { return n + " till"; },             err: "Kunde inte ladda dina uppgifter." },
+    gr:      { done: "Όλα εντάξει",     doneSub: "Δεν υπάρχουν ανοιχτές εκκρεμότητες στα ταξίδια σας.", noDate: "χωρίς προθεσμία", more: function (n) { return "+ " + n + " ακόμη"; },     err: "Δεν ήταν δυνατή η φόρτωση των εκκρεμοτήτων." },
+    id:      { done: "Semua beres",     doneSub: "Tidak ada tugas terbuka di perjalanan Anda.",     noDate: "tanpa tanggal",   more: function (n) { return n + " lagi"; },             err: "Gagal memuat tugas." },
+    vi:      { done: "Đã xong tất cả",  doneSub: "Không có việc cần làm nào trong chuyến đi của bạn.", noDate: "không có hạn",  more: function (n) { return "còn " + n; },               err: "Không thể tải việc cần làm." },
+    ja:      { done: "すべて完了",       doneSub: "旅行に未完了のTo-Doはありません。",                noDate: "期限なし",         more: function (n) { return "他 " + n + " 件"; },       err: "To-Doを読み込めませんでした。" },
+    ko:      { done: "모두 완료",        doneSub: "여행에 미완료된 할 일이 없습니다.",                 noDate: "기한 없음",        more: function (n) { return n + "개 더"; },             err: "할 일을 불러오지 못했습니다." },
+    zh:      { done: "全部完成",         doneSub: "你的行程中没有待办事项。",                         noDate: "无截止日期",       more: function (n) { return "还有 " + n + " 项"; },     err: "无法加载待办事项。" },
+    "zh-TW": { done: "全部完成",         doneSub: "你的行程中沒有待辦事項。",                         noDate: "無截止日期",       more: function (n) { return "還有 " + n + " 項"; },     err: "無法載入待辦事項。" },
+    ar:      { done: "كل شيء مُنجز",     doneSub: "لا توجد مهام مفتوحة في رحلاتك.",                   noDate: "بدون تاريخ",      more: function (n) { return n + " أخرى"; },             err: "تعذّر تحميل المهام." }
+  };
+
+  // TREK locale code -> BCP-47 tag for Intl (most match; a few differ).
+  var INTL_LOCALE = { gr: 'el', br: 'pt-BR' };
+
+  var app = document.getElementById('app');
+  var trek = window.trek;
+  var L = STR.en;
+  var rtf = null;
+  var state = 'loading';
+  var data = null;
+  var loadedOnce = false;
+
+  function el(tag, cls, text) {
+    var n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text != null) n.textContent = text;
+    return n;
+  }
+
+  function midnight(iso) {
+    if (!iso || typeof iso !== 'string') return null;
+    var d = new Date(iso.slice(0, 10) + 'T00:00:00');
+    return isNaN(d.getTime()) ? null : d.getTime();
+  }
+  function daysUntil(iso) {
+    var due = midnight(iso);
+    if (due === null) return null;
+    var t = new Date(); t.setHours(0, 0, 0, 0);
+    return Math.round((due - t.getTime()) / DAY);
+  }
+  function urgency(days) {
+    if (days === null) return 'none';
+    if (days < 0) return 'overdue';
+    if (days <= 2) return 'soon';
+    if (days <= 7) return 'week';
+    return 'later';
+  }
+  var COLOR = {
+    overdue: 'var(--danger, #dc2626)',
+    soon: 'var(--warning, #d97706)',
+    week: 'var(--text-secondary, #374151)',
+    later: 'var(--text-muted, #6b7280)',
+    none: 'var(--text-faint, #9ca3af)'
+  };
+  function dueLabel(days) {
+    if (days === null) return L.noDate;
+    if (!rtf) return String(days) + 'd';        // no Intl — bare fallback, still readable
+    var unit = Math.abs(days) >= 14 ? 'week' : 'day';
+    var val = unit === 'week' ? Math.round(days / 7) : days;
+    try { return rtf.format(val, unit); } catch (e) { return String(days) + 'd'; }
+  }
+
+  var CLOCK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7.5V12l3 1.8"/></svg>';
+  var CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>';
+  var DOTS = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>';
+
+  function taskRow(task, i) {
+    var days = daysUntil(task.dueDate);
+    var u = urgency(days);
+    var row = el('button', 'tt-row is-' + u);
+    row.type = 'button';
+    row.style.setProperty('--tt-c', COLOR[u]);
+    row.style.animationDelay = (i * 40) + 'ms';
+    row.setAttribute('aria-label', task.name + ' — ' + task.tripTitle + ' — ' + dueLabel(days));
+
+    row.appendChild(el('span', 'tt-bar'));
+
+    var body = el('div', 'tt-body');
+    body.appendChild(el('div', 'tt-name', task.name || '—'));
+    var sub = el('div', 'tt-sub');
+    sub.appendChild(el('span', 'tt-trip', task.tripTitle));
+    var due = el('span', 'tt-due');
+    due.innerHTML = CLOCK;
+    due.appendChild(document.createTextNode(dueLabel(days)));
+    sub.appendChild(due);
+    body.appendChild(sub);
+    row.appendChild(body);
+
+    row.addEventListener('click', function () {
+      if (task.tripId != null && trek && typeof trek.navigate === 'function') trek.navigate('/trips/' + task.tripId);
+    });
+    return row;
+  }
+
+  function render() {
+    app.textContent = '';
+
+    if (state === 'loading') {
+      for (var i = 0; i < 2; i++) {
+        var s = el('div', 'tt-sk');
+        s.appendChild(el('div', 'bar sk'));
+        var b = el('div', 'b');
+        b.appendChild(el('div', 'l l1 sk'));
+        b.appendChild(el('div', 'l l2 sk'));
+        s.appendChild(b);
+        app.appendChild(s);
+      }
+      return;
+    }
+
+    if (state === 'error') { app.appendChild(el('div', 'tt-error', L.err)); return; }
+
+    var tasks = (data && data.tasks) || [];
+    if (!tasks.length) {
+      var empty = el('div', 'tt-empty');
+      var ic = el('div', 'tt-empty-ic'); ic.innerHTML = CHECK;
+      empty.appendChild(ic);
+      empty.appendChild(el('div', 'tt-empty-title', L.done));
+      empty.appendChild(el('div', 'tt-empty-sub', L.doneSub));
+      app.appendChild(empty);
+      return;
+    }
+
+    var list = el('div', 'tt-list');
+    var shown = tasks.slice(0, MAX_VISIBLE);
+    for (var j = 0; j < shown.length; j++) list.appendChild(taskRow(shown[j], j));
+    app.appendChild(list);
+
+    var hidden = (data.totalOpen || tasks.length) - shown.length;
+    if (hidden > 0) {
+      var more = el('div', 'tt-more');
+      var mi = el('span'); mi.innerHTML = DOTS; mi.style.display = 'inline-flex';
+      more.appendChild(mi);
+      more.appendChild(document.createTextNode(L.more(hidden)));
+      app.appendChild(more);
+    }
+  }
+
+  function fetchTasks() {
+    if (!trek || typeof trek.invoke !== 'function') { state = 'error'; render(); return; }
+    trek.invoke('/tasks').then(function (res) {
+      data = res || { tasks: [], totalOpen: 0 };
+      state = 'ready'; loadedOnce = true; render();
+    }).catch(function () { state = 'error'; render(); });
+  }
+
+  function applyLocale(locale) {
+    var loc = String(locale || 'en');
+    L = STR[loc] || STR[loc.split('-')[0]] || STR[loc.toLowerCase()] || STR.en;
+    var tag = INTL_LOCALE[loc] || INTL_LOCALE[loc.split('-')[0]] || loc;
+    try { rtf = new Intl.RelativeTimeFormat(tag, { numeric: 'auto' }); }
+    catch (e) {
+      try { rtf = new Intl.RelativeTimeFormat('en', { numeric: 'auto' }); }
+      catch (e2) { rtf = null; }
+    }
+  }
+
+  if (trek && typeof trek.onContext === 'function') {
+    trek.onContext(function (ctx) {
+      applyLocale(ctx && ctx.locale);
+      if (loadedOnce) render();
+    });
+    render();                 // paint the skeleton immediately
+    fetchTasks();
+    setInterval(fetchTasks, POLL_MS);
+  } else {
+    state = 'error'; render();
+  }
+})();
+</script>
+</body>
+</html>
