@@ -1,6 +1,6 @@
 {
   "name": "trek-plugin-trip-todos",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "type": "commonjs",
   "description": "TREK dashboard widget: open to-dos from all trips, sorted by due date.",
